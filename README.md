@@ -134,6 +134,22 @@ See `backend/.env.example` for the full list. The only required variable is
 | `TAVILY_API_KEY` | _(unset)_ | Enables real web search; falls back to mock data if unset |
 | `MAX_AGENT_ITERATIONS` | `10` | Safety cap on the tool-use loop |
 | `CORS_ALLOW_ORIGINS_RAW` | `http://localhost:3000` | Comma-separated allowed frontend origins |
+| `RATE_LIMIT_PER_MINUTE` | `5` | Max `/api/analyze` calls per client IP per minute (`0` disables) |
+| `TASK_TTL_SECONDS` | `3600` | How long a finished task's result stays queryable before it's swept |
+
+## Running the tests
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+Tests mock the Anthropic client entirely (no real API calls, no cost) and
+cover: schema validation, the search tool + dispatcher, the agent's tool-use
+loop (success, schema-validation retry, refusal, truncation, max-iterations),
+task lifecycle + cleanup, the rate limiter, and the API routes end-to-end via
+FastAPI's `TestClient`.
 
 ## What's next (Phase 2 ideas)
 

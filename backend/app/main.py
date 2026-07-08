@@ -7,6 +7,7 @@ Or via the provided Dockerfile / docker-compose for a containerized run.
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -20,6 +21,7 @@ from app.api.routes import router as api_router
 from app.config import Settings, get_settings
 from app.core.exceptions import AgentError, TaskNotFoundError
 from app.core.logging import configure_logging, get_logger
+from app.core.rate_limit import RateLimiter
 from app.services.task_manager import TaskManager
 
 settings: Settings = get_settings()
@@ -49,6 +51,20 @@ def _make_agent_factory(settings: Settings):
     return factory
 
 
+async def _cleanup_loop(task_manager: TaskManager, settings: Settings) -> None:
+    """Periodically evicts expired completed/failed tasks from the in-memory
+    store. Runs for the lifetime of the app; cancelled on shutdown.
+    """
+    while True:
+        await asyncio.sleep(settings.task_cleanup_interval_seconds)
+        try:
+            removed = await task_manager.cleanup_expired(settings.task_ttl_seconds)
+            if removed:
+                logger.info("Task cleanup: evicted %d expired task(s).", removed)
+        except Exception:  # noqa: BLE001 — a sweep failure should never crash the app
+            logger.exception("Task cleanup loop encountered an error.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(
@@ -62,7 +78,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "results instead of live data. See .env.example."
         )
     app.state.task_manager = TaskManager(agent_factory=_make_agent_factory(settings))
+    app.state.rate_limiter = RateLimiter(
+        max_requests=settings.rate_limit_per_minute, window_seconds=60
+    )
+    cleanup_task = asyncio.create_task(_cleanup_loop(app.state.task_manager, settings))
+
     yield
+
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     logger.info("Shutting down.")
 
 
@@ -103,7 +130,10 @@ async def agent_error_handler(request: Request, exc: AgentError) -> JSONResponse
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        # Raw 422 rather than the status.* constant — Starlette renamed
+        # HTTP_422_UNPROCESSABLE_ENTITY to HTTP_422_UNPROCESSABLE_CONTENT in
+        # recent releases; the plain int is stable across both.
+        status_code=422,
         content={"detail": "Invalid request payload.", "errors": exc.errors()},
     )
 

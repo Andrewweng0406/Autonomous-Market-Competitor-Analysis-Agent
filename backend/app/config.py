@@ -30,7 +30,17 @@ class Settings(BaseSettings):
     cors_allow_origins_raw: str = "http://localhost:3000"
 
     # --- Task execution --------------------------------------------------------
+    # How long a completed/failed task's result stays queryable before the
+    # background sweeper evicts it (see app.services.task_manager.cleanup_expired,
+    # started from app.main's lifespan).
     task_ttl_seconds: int = 3600
+    task_cleanup_interval_seconds: int = 300
+
+    # --- Rate limiting -----------------------------------------------------
+    # Each /api/analyze call fans out into several Claude + search-provider
+    # calls, so this endpoint is throttled per client IP to avoid runaway
+    # cost from retries, scripts, or abuse. Set to 0 to disable.
+    rate_limit_per_minute: int = 5
 
     @property
     def cors_allow_origins(self) -> List[str]:

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Optional, Set
 
 from app.agent.agent import MarketAnalysisAgent
@@ -110,6 +110,29 @@ class TaskManager:
         record = self._tasks.get(task_id)
         if record is not None:
             record.subscribers.discard(queue)
+
+    async def cleanup_expired(self, ttl_seconds: int) -> int:
+        """Evict completed/failed tasks whose last update is older than
+        `ttl_seconds`. In-flight tasks (pending/in_progress) are never
+        evicted regardless of age. Returns the number of tasks removed.
+
+        Intended to be called periodically from a background loop (see
+        app.main's lifespan) — without this, the in-memory store grows
+        unbounded for the lifetime of the process.
+        """
+        cutoff = _utcnow() - timedelta(seconds=ttl_seconds)
+        removed = 0
+        async with self._lock:
+            expired_ids = [
+                task_id
+                for task_id, record in self._tasks.items()
+                if record.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
+                and record.updated_at < cutoff
+            ]
+            for task_id in expired_ids:
+                del self._tasks[task_id]
+                removed += 1
+        return removed
 
     async def _update(self, task_id: str, *, notify: bool = False, **fields) -> None:
         async with self._lock:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from app.config import Settings, get_settings
 from app.core.exceptions import TaskNotFoundError
 from app.core.logging import get_logger
+from app.core.rate_limit import RateLimiter
 from app.models.schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -29,6 +30,34 @@ def get_task_manager(request: Request) -> TaskManager:
     return request.app.state.task_manager
 
 
+def _client_key(request: Request) -> str:
+    """Best-effort client identifier for rate limiting. Honors X-Forwarded-For
+    (first hop) since this service is typically deployed behind a proxy/LB;
+    falls back to the direct connection address.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_rate_limit(request: Request) -> None:
+    """Dependency that 429s once a client exceeds the configured per-minute
+    limit on expensive endpoints. Disabled entirely when
+    RATE_LIMIT_PER_MINUTE=0.
+    """
+    limiter: Optional[RateLimiter] = getattr(request.app.state, "rate_limiter", None)
+    if limiter is None or limiter.max_requests <= 0:
+        return
+    key = _client_key(request)
+    if not limiter.allow(key):
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Please wait before starting another analysis.",
+            headers={"Retry-After": str(limiter.retry_after_seconds(key))},
+        )
+
+
 @router.get("/health", response_model=HealthResponse, tags=["meta"])
 async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     return HealthResponse(model=settings.anthropic_model)
@@ -40,6 +69,8 @@ async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     status_code=202,
     tags=["analysis"],
     summary="Start an asynchronous market & competitor analysis",
+    dependencies=[Depends(enforce_rate_limit)],
+    responses={429: {"description": "Rate limit exceeded"}},
 )
 async def analyze(
     payload: AnalyzeRequest,
@@ -53,6 +84,9 @@ async def analyze(
 
     - `GET /api/status/{task_id}` — poll for current status + final result
     - `GET /api/stream/{task_id}` — Server-Sent Events stream of live progress
+
+    Rate limited per client IP (see `RATE_LIMIT_PER_MINUTE`) since each call
+    fans out into several Claude + search-provider requests.
     """
     task_id = str(uuid.uuid4())
     await task_manager.create_task(task_id, payload)
