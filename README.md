@@ -8,9 +8,11 @@ results with Claude.
 
 **Status: Phase 1 (foundational architecture).** The backend is a complete,
 runnable skeleton: FastAPI + native Anthropic tool calling, async task
-execution, and a real (optional) web search integration. The frontend is a
-minimal but fully wired Next.js client so the whole pipeline is testable
-end-to-end tonight.
+execution, a real (optional) web search integration, and a 43-test suite.
+The frontend ("Meridian") is a fully designed Next.js client — hero intake
+form, live streaming progress, and a structured report view (SWOT quadrants,
+competitor cards, sourced trends, Markdown/JSON toggle) — wired against the
+exact backend contract below.
 
 ## How it works
 
@@ -36,7 +38,7 @@ pipeline is structured, and the production upgrade path).
 | LLM | Claude (`claude-sonnet-5` by default) | Adaptive thinking + effort control for research-heavy reasoning; cheap/fast for iterating — swap to `claude-opus-4-8` for max quality |
 | Backend | FastAPI + Pydantic v2 | Async-native, typed, automatic OpenAPI docs at `/docs` |
 | Search | Tavily API (optional; mock fallback) | Purpose-built for LLM agent search, simple REST API |
-| Frontend | Next.js 14 (App Router) + TypeScript + Tailwind | Fast to iterate on, SSE-friendly, easy to deploy |
+| Frontend | Next.js 16 (App Router) + TypeScript + Tailwind v4 | Fast to iterate on, SSE-friendly, easy to deploy |
 | Async task handling | In-memory `TaskManager` + SSE / polling | See ARCHITECTURE.md for the reasoning and the production swap-out path |
 
 ## Project structure
@@ -65,8 +67,16 @@ pipeline is structured, and the production upgrade path).
 │   └── .env.example
 ├── frontend/
 │   ├── app/
-│   │   ├── page.tsx                # Form + live progress + rendered report
-│   │   └── layout.tsx
+│   │   ├── page.tsx                # Phase orchestration: form → progress → report
+│   │   ├── layout.tsx              # Fonts, metadata, theme provider (defaults to light)
+│   │   └── globals.css             # Tailwind v4 theme tokens (light/dark)
+│   ├── components/
+│   │   ├── analysis-form.tsx       # Hero intake form (subject/type/depth/context)
+│   │   ├── progress-view.tsx       # Live SSE progress with polling fallback
+│   │   ├── report-view.tsx         # Structured report + Markdown/JSON toggle
+│   │   ├── swot-grid.tsx           # SWOT quadrants
+│   │   ├── competitor-card.tsx     # Competitor cards
+│   │   └── ui/                     # Base button primitive (shadcn-style)
 │   ├── lib/api.ts                  # Typed backend client (fetch + SSE + polling)
 │   ├── package.json
 │   └── .env.local.example
@@ -112,7 +122,9 @@ npm run dev
 ```
 
 Visit `http://localhost:3000`, enter a business idea, and watch the live
-progress stream in as the agent researches and reports back.
+progress stream in as the agent researches and reports back. Click "view a
+sample report" on the form screen to preview the report UI instantly with
+static sample data — no backend call required.
 
 ### Docker (backend only)
 
