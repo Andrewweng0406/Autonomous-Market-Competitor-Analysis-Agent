@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # --- Anthropic / Agent configuration -----------------------------------
     anthropic_api_key: str
-    anthropic_model: str = "claude-opus-4-8"
+    anthropic_model: str = "claude-sonnet-5"
     anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
     max_agent_iterations: int = 10
     max_output_tokens: int = 8000

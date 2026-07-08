@@ -33,7 +33,7 @@ pipeline is structured, and the production upgrade path).
 | Layer | Choice | Why |
 |---|---|---|
 | Agent orchestration | Native Anthropic tool calling (manual loop) | No beta SDK dependency; full control over progress reporting and the JSON output contract |
-| LLM | Claude (`claude-opus-4-8` by default) | Adaptive thinking + effort control for research-heavy reasoning |
+| LLM | Claude (`claude-sonnet-5` by default) | Adaptive thinking + effort control for research-heavy reasoning; cheap/fast for iterating — swap to `claude-opus-4-8` for max quality |
 | Backend | FastAPI + Pydantic v2 | Async-native, typed, automatic OpenAPI docs at `/docs` |
 | Search | Tavily API (optional; mock fallback) | Purpose-built for LLM agent search, simple REST API |
 | Frontend | Next.js 14 (App Router) + TypeScript + Tailwind | Fast to iterate on, SSE-friendly, easy to deploy |
@@ -129,7 +129,7 @@ See `backend/.env.example` for the full list. The only required variable is
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_MODEL` | `claude-opus-4-8` | Model used for the agent |
+| `ANTHROPIC_MODEL` | `claude-sonnet-5` | Model used for the agent — swap to `claude-opus-4-8` for max reasoning quality once you're past prototyping |
 | `ANTHROPIC_EFFORT` | `high` | `low` \| `medium` \| `high` \| `xhigh` \| `max` — thinking/tool-use depth |
 | `TAVILY_API_KEY` | _(unset)_ | Enables real web search; falls back to mock data if unset |
 | `MAX_AGENT_ITERATIONS` | `10` | Safety cap on the tool-use loop |
