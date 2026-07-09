@@ -79,7 +79,9 @@ pipeline is structured, and the production upgrade path).
 │   │   └── ui/                     # Base button primitive (shadcn-style)
 │   ├── lib/api.ts                  # Typed backend client (fetch + SSE + polling)
 │   ├── package.json
+│   ├── Dockerfile                  # Multi-stage, Next.js standalone output
 │   └── .env.local.example
+├── docker-compose.yml              # Full-stack local/prod convenience compose
 └── docs/
     └── ARCHITECTURE.md
 ```
@@ -126,7 +128,19 @@ progress stream in as the agent researches and reports back. Click "view a
 sample report" on the form screen to preview the report UI instantly with
 static sample data — no backend call required.
 
-### Docker (backend only)
+### Docker (full stack)
+
+```bash
+cp backend/.env.example backend/.env   # fill in ANTHROPIC_API_KEY
+docker compose up --build
+```
+
+Frontend at `http://localhost:3000`, backend at `http://localhost:8000/docs`.
+The frontend image bakes `NEXT_PUBLIC_API_BASE_URL` in at build time (it's
+inlined into the client bundle) — see the comment in `docker-compose.yml` if
+deploying the two services to different hosts.
+
+Backend only:
 
 ```bash
 cd backend
@@ -162,6 +176,15 @@ cover: schema validation, the search tool + dispatcher, the agent's tool-use
 loop (success, schema-validation retry, refusal, truncation, max-iterations),
 task lifecycle + cleanup, the rate limiter, and the API routes end-to-end via
 FastAPI's `TestClient`.
+
+```bash
+cd frontend
+npm test
+```
+
+Covers the typed API client (`lib/api.ts`) — request construction, error
+mapping (network failure, 404, generic non-OK), and the SSE/status URL
+helpers — with `fetch` mocked, no backend required.
 
 ## What's next (Phase 2 ideas)
 

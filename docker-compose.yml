@@ -1,0 +1,32 @@
+# Local/full-stack convenience compose file.
+#
+#   cp backend/.env.example backend/.env   # fill in ANTHROPIC_API_KEY
+#   docker compose up --build
+#
+# Frontend: http://localhost:3000   Backend: http://localhost:8000/docs
+#
+# NEXT_PUBLIC_API_BASE_URL is baked into the frontend's client bundle at
+# build time (see frontend/Dockerfile), so it must point at wherever the
+# *browser* can reach the backend — http://localhost:8000 is correct for
+# this same-machine compose setup, but must be overridden (and the frontend
+# image rebuilt) if the two services are deployed to different hosts.
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
